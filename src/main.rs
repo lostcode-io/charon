@@ -12,6 +12,9 @@ pub struct Args {
 
     #[clap(short, long, default_value = "info")]
     log: String,
+
+    #[clap(short, long, default_value = "false")]
+    debug: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]

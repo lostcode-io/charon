@@ -3,7 +3,7 @@ use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 use log::{info, warn, error};
 
-pub async fn read_from_socket(socket: &mut TcpStream) -> Option<String> {
+pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<String> {
     let mut result = String::new();
 
     let mut headers = String::new();
@@ -41,7 +41,9 @@ pub async fn read_from_socket(socket: &mut TcpStream) -> Option<String> {
         }
     }
 
-    info!("Content-Length: {}", content_length);
+    if debug {
+        info!("Content-Length: {}", content_length);
+    }
 
     if content_length > 1024 * 1024 {
         warn!("Invalid content length: {}", content_length);
