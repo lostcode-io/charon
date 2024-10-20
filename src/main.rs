@@ -1,5 +1,6 @@
 pub mod client;
 pub mod server;
+pub mod utils;
 
 use clap::{Parser, Subcommand};
 
@@ -26,6 +27,9 @@ enum Commands {
 
         #[clap(short, long)]
         server: String,
+
+        #[clap(short, long)]
+        token: String,
     },
 }
 
@@ -38,8 +42,10 @@ fn main() {
     let args_clone = args.clone();
     match args.cmd {
         Commands::Server { port } => server::run(args_clone, port),
-        Commands::Client { server, port } => {
-            client::run(args_clone, server, format!("127.0.0.1:{}", port))
-        }
+        Commands::Client {
+            server,
+            port,
+            token,
+        } => client::run(args_clone, server, format!("127.0.0.1:{}", port), token),
     }
 }
