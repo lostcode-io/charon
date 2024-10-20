@@ -1,3 +1,6 @@
+[![Rust](https://github.com/lostcode-io/charon/actions/workflows/rust.yml/badge.svg)](https://github.com/lostcode-io/charon/actions)
+![license](https://img.shields.io/badge/license-GPL_3-blue)
+
 # charon
 A utility to forward foreign requests to a local server.
 
