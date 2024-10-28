@@ -32,7 +32,7 @@ pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<Str
 
     let mut content_length = 0;
     for line in headers.lines() {
-        if line.starts_with("Content-Length") {
+        if line.to_lowercase().starts_with("content-length") {
             content_length = line
                 .split(": ")
                 .collect::<Vec<&str>>()[1]
@@ -60,6 +60,10 @@ pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<Str
                 return None;
             }
         }
+    }
+
+    if debug {
+        info!("Data from socket: \n{}", result);
     }
 
     Some(result)

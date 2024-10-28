@@ -2,6 +2,9 @@ pub mod client;
 pub mod server;
 pub mod utils;
 
+#[cfg(test)]
+pub mod test;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Clone, Parser)]

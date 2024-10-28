@@ -15,48 +15,62 @@ pub async fn connect_to_server(server: &str) -> TcpStream {
     }
 }
 
+pub async fn send_add_request(debug: bool, stream: &mut TcpStream, token: &str) -> Result<String, String> {
+    let data = format!("POST / HTTP/1.1\r\n{}: {}\r\n\r\n{}", "Content-Length", token.len(), token);
+    if debug {
+        info!("Data to send (authorization): \n{}", data);
+    }
+    if let Err(e) = stream.write(data.as_bytes()).await {
+        return Err(format!("Failed to write to server: {}", e));
+    }
+
+    // Read the response from the server
+    let response = match read_from_socket(debug, stream).await {
+        Some(response) => response,
+        None => {
+            return Err("Failed to read from server".to_string());
+        }
+    };
+    
+    if debug {
+        info!("Response from server: \n{}", response);
+    }
+
+    if response.starts_with("HTTP/1.1 401") {
+        return Err("Wrong token".to_string());
+    }
+
+    let body = response
+        .split("\n")
+        .skip(2)
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    return Ok(body);
+}
+
 pub fn run(args: Args, server: String, local_server: String, token: String) {
     let debug = args.debug;
     let rt = tokio::runtime::Runtime::new().unwrap();
     info!("Running client. Forwarding from: {}, to: {}", server, local_server);
 
     rt.block_on(async {
-        let mut stream = connect_to_server(&server).await;
+        let mut stream = match TcpStream::connect(&server).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                error!("Failed to connect to server: {}. Is local server on?", e);
+                std::process::exit(1);
+            }
+        };
 
-        // Send a post request to the server /add/
-        let data = format!("POST / HTTP/1.1\r\n{}: {}\r\n\r\n{}", "Content-Length", token.len(), token);
-        if debug {
-            info!("Data to send (authorization): \n{}", data);
-        }
-        if let Err(e) = stream.write(data.as_bytes()).await {
-            error!("Failed to write to server: {}", e);
-            return;
-        }
-
-        // Read the response from the server
-        let response = match read_from_socket(debug, &mut stream).await {
-            Some(response) => response,
-            None => {
-                error!("Failed to read from server");
+        let addr = match send_add_request(debug, &mut stream, &token).await {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!("Failed to send add request: {}", e);
                 return;
             }
         };
-        
-        if debug {
-            info!("Response from server: \n{}", response);
-        }
-
-        if response.starts_with("HTTP/1.1 401") {
-            error!("Wrong token");
-            std::process::exit(1);
-        } else if response.starts_with("HTTP/1.1 200") {
-            let body = response
-                .split("\n")
-                .skip(2)
-                .collect::<Vec<&str>>()
-                .join("\n");
-            info!("Running on http://{}/{}/", server, body);
-        }
+        info!("Running on http://{}/{}/", server, addr);
 
         loop {
             print!("\n");
