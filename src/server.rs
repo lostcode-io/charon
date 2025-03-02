@@ -1,7 +1,5 @@
 use crate::utils::read_from_socket;
-use crate::Args;
-
-use log::{error, info};
+use tracing::{error, info, debug, debug_span};
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
@@ -15,8 +13,10 @@ struct Client {
 
 type ClientList = Arc<Mutex<Vec<Client>>>;
 
-pub fn run(args: Args, port: u16) {
-    let debug = args.debug;
+pub fn run(port: u16) {
+    let span = debug_span!("server::run");
+    let _enter = span.enter();
+
     info!("Running server on port: {}", port);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -42,8 +42,6 @@ pub fn run(args: Args, port: u16) {
         });
 
         loop {
-            print!("\n");
-
             let (mut socket, _) = match listener.accept().await {
                 Ok(socket) => socket,
                 Err(e) => {
@@ -54,32 +52,30 @@ pub fn run(args: Args, port: u16) {
             info!("Accepted connection from: {}", socket.peer_addr().unwrap());
 
             // Read the data from the socket
-            let data = match read_from_socket(debug, &mut socket).await {
+            let data = match read_from_socket(&mut socket).await {
                 Some(data) => data,
                 None => {
                     error!("Failed to read from socket");
                     continue;
                 }
             };
-            if debug {
-                info!("Recieved data: \n{}", data);
-            }
+            debug!("Recieved data: \n{}", data);
             let path = data.split_whitespace().nth(1).unwrap_or("/").to_string();
 
             // Chech if the path is just a slash (Add client)
             if path == "/" {
-                handle_client(debug, &psql, clients_clone.clone(), socket, data).await;
+                handle_client(&psql, clients_clone.clone(), socket, data).await;
             } else {
-                handle_proxy(debug, clients_clone.clone(), socket, path, data).await;
+                handle_proxy(clients_clone.clone(), socket, path, data).await;
             }
         }
     });
 }
 
-async fn handle_client(debug: bool, psql: &tokio_postgres::Client, clients_clone: ClientList, mut socket: TcpStream, data: String) {
-    if debug {
-        info!("Client connection request recieved");
-    }
+async fn handle_client(psql: &tokio_postgres::Client, clients_clone: ClientList, mut socket: TcpStream, data: String) {
+    let span = debug_span!("handle_client");
+    let _enter = span.enter();
+    debug!("Client connection request recieved");
 
     let token = data.split("\n").skip(3).collect::<Vec<&str>>().join("\n");
     let rows = match psql.query("SELECT * FROM tokens", &[]).await {
@@ -132,7 +128,7 @@ async fn handle_client(debug: bool, psql: &tokio_postgres::Client, clients_clone
     info!("Client added: {}", addr);
 }
 
-async fn handle_proxy(debug: bool, clients_clone: ClientList, mut socket: TcpStream, path: String, data: String) {
+async fn handle_proxy(clients_clone: ClientList, mut socket: TcpStream, path: String, data: String) {
     // Check if path starts with a number which is an id of a client
     let id = match path.split('/').nth(1) {
         Some(id) => id,
@@ -152,19 +148,15 @@ async fn handle_proxy(debug: bool, clients_clone: ClientList, mut socket: TcpStr
         }
     };
 
-    if debug {
-        info!("Data from listener: \n{}", data);
-    }
+    debug!("Data from listener: \n{}", data);
 
     // Send the request to the client without the id part
     let data_without_id = data.replace(&format!("/{}", id), "");
 
-    if debug {
-        info!(
-            "Received request from listener: {}, data: \n{}",
-            id, data_without_id
-        );
-    }
+    debug!(
+        "Received request from listener: {}, data: \n{}",
+        id, data_without_id
+    );
 
     // Send the request to the client
     if let Err(e) = client.stream.write_all(data_without_id.as_bytes()).await {
@@ -176,15 +168,13 @@ async fn handle_proxy(debug: bool, clients_clone: ClientList, mut socket: TcpStr
         }
     }
 
-    if debug {
-        info!(
-            "Sent request to client: {}, data: \n{}",
-            id, data_without_id
-        );
-    }
+    debug!(
+        "Sent request to client: {}, data: \n{}",
+        id, data_without_id
+    );
 
     // Read the response from the client
-    let response = match read_from_socket(debug, &mut client.stream).await {
+    let response = match read_from_socket(&mut client.stream).await {
         Some(response) => response,
         None => {
             error!("Failed to read from client");

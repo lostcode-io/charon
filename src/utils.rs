@@ -1,9 +1,12 @@
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
-use log::{info, warn, error};
+use tracing::{debug, warn, error, debug_span};
 
-pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<String> {
+pub async fn read_from_socket(socket: &mut TcpStream) -> Option<String> {
+    let span = debug_span!("read_from_socket");
+    let _enter = span.enter();
+
     let mut result = String::new();
 
     let mut headers = String::new();
@@ -41,9 +44,7 @@ pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<Str
         }
     }
 
-    if debug {
-        info!("Content-Length: {}", content_length);
-    }
+    debug!("Content-Length: {}", content_length);
 
     if content_length > 1024 * 1024 {
         warn!("Invalid content length: {}", content_length);
@@ -62,9 +63,7 @@ pub async fn read_from_socket(debug: bool, socket: &mut TcpStream) -> Option<Str
         }
     }
 
-    if debug {
-        info!("Data from socket: \n{}", result);
-    }
+    debug!("Data from socket: \n{}", result);
 
     Some(result)
 }
