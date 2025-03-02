@@ -6,15 +6,13 @@ pub mod utils;
 pub mod test;
 
 use clap::{Parser, Subcommand};
+use tracing::{info, trace};
 
 #[derive(Debug, Clone, Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     #[command(subcommand)]
     cmd: Commands,
-
-    #[clap(short, long, default_value = "info")]
-    log: String,
 
     #[clap(short, long, default_value = "false")]
     debug: bool,
@@ -40,18 +38,21 @@ enum Commands {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .compact()
+        .init();
+    
+    trace!("Parsing arguments");
     let args = Args::parse();
+    info!("Arguments parsed");
 
-    std::env::set_var("RUST_APP_LOG", args.clone().log);
-    pretty_env_logger::init_custom_env("RUST_APP_LOG");
-
-    let args_clone = args.clone();
+    info!("Running command");
     match args.cmd {
-        Commands::Server { port } => server::run(args_clone, port),
+        Commands::Server { port } => server::run(port),
         Commands::Client {
             server,
             port,
             token,
-        } => client::run(args_clone, server, format!("127.0.0.1:{}", port), token),
+        } => client::run(server, format!("127.0.0.1:{}", port), token),
     }
 }

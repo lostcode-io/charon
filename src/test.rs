@@ -25,7 +25,7 @@ pub mod utils {
         let mut client = TokioTcpStream::connect(addr).await.expect("Could not connect to server");
 
         // Run the tested function
-        let result = read_from_socket(false, &mut client).await;
+        let result = read_from_socket(&mut client).await;
 
         // Assert that the response is what we expect
         assert_eq!(result, Some(MESSAGE.to_string()));

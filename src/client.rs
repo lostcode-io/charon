@@ -1,7 +1,5 @@
 use crate::utils::read_from_socket;
-use crate::Args;
-
-use log::{error, info};
+use tracing::{error, info, debug, debug_span};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
@@ -15,26 +13,25 @@ pub async fn connect_to_server(server: &str) -> TcpStream {
     }
 }
 
-pub async fn send_add_request(debug: bool, stream: &mut TcpStream, token: &str) -> Result<String, String> {
+pub async fn send_add_request(stream: &mut TcpStream, token: &str) -> Result<String, String> {
+    let span = debug_span!("send_add_request");
+    let _enter = span.enter();
+
     let data = format!("POST / HTTP/1.1\r\n{}: {}\r\n\r\n{}", "Content-Length", token.len(), token);
-    if debug {
-        info!("Data to send (authorization): \n{}", data);
-    }
+    debug!("Data to send (authorization): \n{}", data);
     if let Err(e) = stream.write(data.as_bytes()).await {
         return Err(format!("Failed to write to server: {}", e));
     }
 
     // Read the response from the server
-    let response = match read_from_socket(debug, stream).await {
+    let response = match read_from_socket(stream).await {
         Some(response) => response,
         None => {
             return Err("Failed to read from server".to_string());
         }
     };
     
-    if debug {
-        info!("Response from server: \n{}", response);
-    }
+    debug!("Response from server: \n{}", response);
 
     if response.starts_with("HTTP/1.1 401") {
         return Err("Wrong token".to_string());
@@ -49,8 +46,10 @@ pub async fn send_add_request(debug: bool, stream: &mut TcpStream, token: &str) 
     return Ok(body);
 }
 
-pub fn run(args: Args, server: String, local_server: String, token: String) {
-    let debug = args.debug;
+pub fn run(server: String, local_server: String, token: String) {
+    let span = debug_span!("client::run");
+    let _enter = span.enter();
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     info!("Running client. Forwarding from: {}, to: {}", server, local_server);
 
@@ -63,7 +62,7 @@ pub fn run(args: Args, server: String, local_server: String, token: String) {
             }
         };
 
-        let addr = match send_add_request(debug, &mut stream, &token).await {
+        let addr = match send_add_request(&mut stream, &token).await {
             Ok(addr) => addr,
             Err(e) => {
                 error!("Failed to send add request: {}", e);
@@ -76,7 +75,7 @@ pub fn run(args: Args, server: String, local_server: String, token: String) {
             print!("\n");
 
             // Read from the server
-            let data = match read_from_socket(debug, &mut stream).await {
+            let data = match read_from_socket(&mut stream).await {
                 Some(data) => data,
                 None => {
                     error!("Failed to read from server");
@@ -87,9 +86,7 @@ pub fn run(args: Args, server: String, local_server: String, token: String) {
             info!("Accepted data from server");
             let start = std::time::Instant::now();
 
-            if debug {
-                info!("Data from server: \n{}", data);
-            }
+            debug!("Data from server: \n{}", data);
 
             // Send the buffer to the local server
             let mut local_stream = connect_to_server(&local_server).await;
@@ -99,21 +96,17 @@ pub fn run(args: Args, server: String, local_server: String, token: String) {
                 return;
             }
             local_stream.flush().await.unwrap();
-            if debug {
-                info!("Data sent to local server: \n{}", data);
-            }
+            debug!("Data sent to local server: \n{}", data);
 
             // Read the response from the local server
-            let response = match read_from_socket(debug, &mut local_stream).await {
+            let response = match read_from_socket(&mut local_stream).await {
                 Some(response) => response,
                 None => {
                     error!("Failed to read from local server");
                     return;
                 }
             };
-            if debug {
-                info!("Response from local server: \n{}", response);
-            }
+            debug!("Response from local server: \n{}", response);
 
             // Send the response back to the server
             stream.set_nodelay(true).unwrap();
